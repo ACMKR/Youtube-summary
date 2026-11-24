@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Youtube Summary</title>
+<script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
+<style>
+  :root{
+    --bg:#f6f6f4; --card:#fff; --ink:#1d1d1f; --muted:#6b6b70; --line:#e3e3e0;
+    --accent:#c4302b; --accent-ink:#fff; --ok:#1f7a4d; --warn:#9a6700; --err:#b42318; --busy:#2457c5;
+    --radius:12px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#141416; --card:#1e1e21; --ink:#ececef; --muted:#9a9aa2; --line:#2e2e33; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Malgun Gothic","Apple SD Gothic Neo",sans-serif;background:var(--bg);color:var(--ink);font-size:15px;line-height:1.55}
+  header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:12px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;flex:1;display:flex;align-items:center;gap:8px}
+  header h1 .dot{width:12px;height:12px;border-radius:3px;background:var(--accent)}
+  main{max-width:1100px;margin:0 auto;padding:20px}
+  button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 14px;border-radius:8px;cursor:pointer}
+  button:hover:not(:disabled){border-color:var(--muted)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+  button.small{padding:3px 10px;font-size:13px}
+  input[type=text],input[type=password],select,textarea{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;width:100%}
+  textarea{min-height:130px;resize:vertical}
+  label.field{display:block;margin-bottom:12px}
+  label.field span{display:block;font-size:13px;color:var(--muted);margin-bottom:4px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px}
+  details.card > summary{cursor:pointer;font-weight:600;list-style:none}
+  details.card > summary::-webkit-details-marker{display:none}
+  details.card > summary::before{content:"▸ ";color:var(--muted)}
+  details.card[open] > summary::before{content:"▾ "}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 16px}
+  @media (max-width:720px){.grid2{grid-template-columns:1fr}}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .muted{color:var(--muted);font-size:13px}
+  .tabs{display:flex;gap:4px;margin-bottom:14px;border-bottom:1px solid var(--line)}
+  .tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:none;padding:8px 14px;color:var(--muted)}
+  .tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+  .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+  .toolbar .spacer{flex:1}
+  .item{display:grid;grid-template-columns:28px 168px 1fr;gap:12px;align-items:start;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--card);margin-bottom:8px}
+  .item.unavail{opacity:.55}
+  .item.deleted .title{text-decoration:line-through;color:var(--muted)}
+  .item input[type=checkbox]{width:18px;height:18px;margin-top:4px}
+  .thumb{width:168px;aspect-ratio:16/9;border-radius:8px;background:#000 center/cover no-repeat;position:relative}
+  .thumb .dur{position:absolute;right:5px;bottom:5px;background:rgba(0,0,0,.8);color:#fff;font-size:12px;padding:0 5px;border-radius:4px}
+  @media (max-width:600px){.item{grid-template-columns:24px 1fr}.thumb{display:none}}
+  .title{font-weight:600;color:var(--ink);text-decoration:none}
+  .title:hover{text-decoration:underline}
+  .badge{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid currentColor;margin-right:6px}
+  .b-ok{color:var(--ok)} .b-err{color:var(--err)} .b-warn{color:var(--warn)} .b-busy{color:var(--busy)} .b-mute{color:var(--muted)}
+  .summary{margin-top:10px;padding:12px 14px;background:var(--bg);border-radius:8px;font-size:14px}
+  .summary h3,.summary h4{margin:10px 0 4px;font-size:15px}
+  .summary ul,.summary ol{margin:4px 0;padding-left:20px}
+  .summary p{margin:6px 0}
+  .hist{padding:14px 16px;border:1px solid var(--line);border-radius:10px;background:var(--card);margin-bottom:10px}
+  .hist .meta{font-size:12px;color:var(--muted)}
+  .empty{text-align:center;color:var(--muted);padding:40px 0}
+  #toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20;max-width:90vw}
+  #toast.show{opacity:1}
+  ol.guide li{margin-bottom:6px}
+  code{background:var(--bg);padding:1px 5px;border-radius:4px;font-size:13px}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-1px;margin-right:4px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<header>
+  <h1><span class="dot"></span>유튜브 재생목록 요약기</h1>
+  <span id="authStatus" class="muted">로그인 안 됨</span>
+  <button id="btnLogin" class="primary">Google 로그인</button>
+  <button id="btnLogout" style="display:none">로그아웃</button>
+</header>
+
+<main>
+  <details class="card" id="settingsBox">
+    <summary>설정</summary>
+    <div style="margin-top:14px">
+      <div class="grid2">
+        <label class="field"><span>OAuth 클라이언트 ID</span>
+          <input type="text" id="cfgClientId" placeholder="xxxx.apps.googleusercontent.com"></label>
+        <label class="field"><span>Gemini API 키</span>
+          <input type="password" id="cfgGeminiKey" placeholder="AIza..."></label>
+        <label class="field"><span>동시 요약 개수</span>
+          <select id="cfgConc"><option value="1">1개씩</option><option value="2">2개씩</option><option value="3">3개씩</option></select></label>
+      </div>
+      <label class="field"><span>요약 프롬프트</span>
+        <textarea id="cfgPrompt"></textarea></label>
+      <div class="row" style="gap:18px;margin-bottom:10px">
+        <label><input type="checkbox" id="cfgLowRes"> 저해상도로 처리 (긴 영상도 잘 들어가고 토큰 절약, 요약 품질은 거의 같음)</label>
+      </div>
+      <div class="row">
+        <button class="primary" id="btnSave">설정 저장</button>
+        <button id="btnResetPrompt">프롬프트 기본값</button>
+        <span class="muted">모델: Gemini 3.1 Flash-Lite (고정) · 설정과 요약 기록은 이 브라우저에만 저장됩니다.</span>
+      </div>
+
+      <details style="margin-top:16px">
+        <summary class="muted" style="cursor:pointer">처음 설정 방법</summary>
+        <ol class="guide muted" style="margin-top:10px">
+          <li><a href="https://console.cloud.google.com/" target="_blank">Google Cloud Console</a>에서 프로젝트를 만들고 <b>YouTube Data API v3</b>를 사용 설정합니다.</li>
+          <li><b>OAuth 동의 화면</b>: 사용자 유형 "외부", 테스트 사용자에 본인 Gmail 추가.</li>
+          <li><b>사용자 인증 정보 → OAuth 클라이언트 ID → 웹 애플리케이션</b>. "승인된 JavaScript 원본"에 이 페이지 주소를 넣습니다. 예: <code>https://아이디.github.io</code>, <code>http://localhost:8000</code></li>
+          <li><a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>에서 Gemini API 키를 발급합니다.</li>
+          <li>위 칸에 클라이언트 ID와 API 키를 넣고 저장 → Google 로그인.</li>
+        </ol>
+        <p class="muted">파일을 더블클릭해서 여는 방식(file://)은 Google 로그인이 안 됩니다. GitHub Pages에 올리거나, 이 파일이 있는 폴더에서 <code>python -m http.server 8000</code> 실행 후 <code>http://localhost:8000</code>으로 여세요.</p>
+      </details>
+    </div>
+  </details>
+
+  <div class="tabs">
+    <button id="tabList" class="on">재생목록</button>
+    <button id="tabHist">요약 기록 <span id="histCount" class="muted"></span></button>
+  </div>
+
+  <section id="viewList">
+    <div class="card">
+      <div class="row" style="flex-wrap:nowrap">
+        <select id="plSelect" disabled><option>로그인 후 재생목록을 불러옵니다</option></select>
+        <button id="btnReload" disabled title="재생목록 다시 불러오기">새로고침</button>
+      </div>
+      <div class="muted" id="plInfo" style="margin-top:8px"></div>
+    </div>
+
+    <div class="toolbar">
+      <button class="small" id="btnAll" disabled>전체 선택</button>
+      <button class="small" id="btnNone" disabled>선택 해제</button>
+      <span class="muted" id="selInfo"></span>
+      <span class="spacer"></span>
+      <label class="muted"><input type="checkbox" id="optDelete" checked> 요약 후 재생목록에서 삭제</label>
+      <button id="btnStop" style="display:none">중지</button>
+      <button class="primary" id="btnRun" disabled>선택한 영상 요약</button>
+    </div>
+
+    <div id="list"><div class="empty">설정을 마치고 Google 로그인을 해주세요.</div></div>
+  </section>
+
+  <section id="viewHist" style="display:none">
+    <div class="toolbar">
+      <input type="text" id="histSearch" placeholder="제목·채널·내용 검색" style="max-width:320px">
+      <span class="spacer"></span>
+      <button class="small" id="btnExport">Markdown으로 내보내기</button>
+      <button class="small" id="btnClearHist">기록 전체 삭제</button>
+    </div>
+    <div id="histList"></div>
+  </section>
+
+  <p class="muted" id="quotaInfo" style="text-align:right"></p>
+</main>
+<div id="toast"></div>
+
+<script>
+'use strict';
+const SCOPE = 'https://www.googleapis.com/auth/youtube';
+const MODEL = 'gemini-3.1-flash-lite';   // 고정 모델
+const DEFAULT_PROMPT =
+`이 유튜브 영상을 한국어로 요약해줘.
+
+형식:
+**한 줄 요약:** 영상 전체를 한 문장으로
+
+**핵심 내용:**
+- 중요한 요점 5~8개 (구체적인 숫자·예시·이름 포함)
+
+**알아둘 점 / 실천 포인트:**
+- 있으면 2~3개, 없으면 생략
+
+인사말이나 서론 없이 요약만 작성해.`;
+
+/* ---------- storage ---------- */
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ toast('브라우저 저장 공간에 저장하지 못했습니다'); } }
+};
+let cfg = Object.assign({
+  clientId:'', geminiKey:'', prompt:DEFAULT_PROMPT,
+  concurrency:2, lowRes:true, deleteAfter:true, playlistId:''
+}, LS.get('yts_cfg', {}));
+let history = LS.get('yts_history', []);   // [{videoId,title,channel,duration,summary,model,at,playlist}]
+let playlists = [];
+let items = [];          // playlist items in view
+let running = false, abortCtl = null;
+let quota = 0;
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function toast(msg, ms=2600){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast._t); toast._t=setTimeout(()=>t.classList.remove('show'), ms); }
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+function parseISODur(s){ const m = /P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(s||''); if(!m) return 0; return (+m[1]||0)*86400 + (+m[2]||0)*3600 + (+m[3]||0)*60 + (+m[4]||0); }
+function fmtDur(sec){ if(!sec) return ''; const h=Math.floor(sec/3600), m=Math.floor(sec%3600/60), s=sec%60; return h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`; }
+function fmtHours(sec){ const h=Math.floor(sec/3600), m=Math.round(sec%3600/60); return h ? `${h}시간 ${m}분` : `${m}분`; }
+function addQuota(n){ quota += n; $('quotaInfo').textContent = quota ? `이번 세션 YouTube API 사용량: 약 ${quota.toLocaleString()} / 일일 10,000 단위` : ''; }
+
+/* simple markdown → html */
+function md(src){
+  const lines = esc(src).split(/\r?\n/);
+  let out = '', list = null;
+  const inline = s => s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/(^|[^*])\*(?!\s)(.+?)\*/g,'$1<em>$2</em>').replace(/`(.+?)`/g,'<code>$1</code>');
+  const close = () => { if(list){ out += `</${list}>`; list = null; } };
+  for(const raw of lines){
+    const l = raw.trimEnd();
+    let m;
+    if(/^\s*$/.test(l)){ close(); continue; }
+    if((m = /^#{3,6}\s+(.*)/.exec(l))){ close(); out += `<h4>${inline(m[1])}</h4>`; continue; }
+    if((m = /^#{1,2}\s+(.*)/.exec(l))){ close(); out += `<h3>${inline(m[1])}</h3>`; continue; }
+    if((m = /^\s*[-*•]\s+(.*)/.exec(l))){ if(list!=='ul'){ close(); out+='<ul>'; list='ul'; } out += `<li>${inline(m[1])}</li>`; continue; }
+    if((m = /^\s*\d+[.)]\s+(.*)/.exec(l))){ if(list!=='ol'){ close(); out+='<ol>'; list='ol'; } out += `<li>${inline(m[1])}</li>`; continue; }
+    close(); out += `<p>${inline(l)}</p>`;
+  }
+  close();
+  return out;
+}
+
+/* ---------- settings UI ---------- */
+function loadSettingsUI(){
+  $('cfgClientId').value = cfg.clientId;
+  $('cfgGeminiKey').value = cfg.geminiKey;
+  $('cfgPrompt').value = cfg.prompt;
+  $('cfgConc').value = String(cfg.concurrency);
+  $('cfgLowRes').checked = !!cfg.lowRes;
+  $('optDelete').checked = !!cfg.deleteAfter;
+  if(!cfg.clientId || !cfg.geminiKey) $('settingsBox').open = true;
+}
+$('btnSave').onclick = () => {
+  const oldClient = cfg.clientId;
+  cfg.clientId = $('cfgClientId').value.trim();
+  cfg.geminiKey = $('cfgGeminiKey').value.trim();
+  cfg.prompt = $('cfgPrompt').value.trim() || DEFAULT_PROMPT;
+  cfg.concurrency = +$('cfgConc').value || 2;
+  cfg.lowRes = $('cfgLowRes').checked;
+  LS.set('yts_cfg', cfg);
+  if(cfg.clientId !== oldClient){ tokenClient = null; accessToken = null; initAuth(); updateAuthUI(); }
+  toast('설정을 저장했습니다');
+  if(cfg.clientId && cfg.geminiKey) $('settingsBox').open = false;
+};
+$('btnResetPrompt').onclick = () => { $('cfgPrompt').value = DEFAULT_PROMPT; };
+$('optDelete').onchange = () => { cfg.deleteAfter = $('optDelete').checked; LS.set('yts_cfg', cfg); };
+/* ---------- Google auth (GIS token model) ---------- */
+let tokenClient = null, accessToken = null, tokenExpiry = 0, waiters = [];
+let gisReady = false;
+function gisLoaded(){ gisReady = true; initAuth(); updateAuthUI(); }
+function initAuth(){
+  if(!gisReady || !cfg.clientId || tokenClient) return;
+  try{
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: cfg.clientId,
+      scope: SCOPE,
+      callback: resp => {
+        const w = waiters; waiters = [];
+        if(resp.error){ w.forEach(x => x.rej(new Error(resp.error_description || resp.error))); return; }
+        accessToken = resp.access_token;
+        tokenExpiry = Date.now() + (Number(resp.expires_in || 3600) - 60) * 1000;
+        w.forEach(x => x.res(accessToken));
+        updateAuthUI();
+      },
+      error_callback: err => {
+        const w = waiters; waiters = [];
+        w.forEach(x => x.rej(new Error(err.type === 'popup_closed' ? '로그인 창이 닫혔습니다' : (err.message || err.type))));
+      }
+    });
+  }catch(e){ toast('OAuth 초기화 실패: ' + e.message, 4000); }
+}
+function tokenValid(minLeftMs = 0){ return accessToken && Date.now() + minLeftMs < tokenExpiry; }
+function requestToken(){   // must be called from a click
+  if(!tokenClient){ initAuth(); if(!tokenClient) return Promise.reject(new Error('설정에서 OAuth 클라이언트 ID를 입력하세요')); }
+  return new Promise((res, rej) => { waiters.push({res, rej}); tokenClient.requestAccessToken({ prompt: accessToken ? '' : 'consent' }); });
+}
+function currentToken(){
+  if(tokenValid()) return accessToken;
+  throw new Error('로그인이 만료되었습니다. 상단에서 다시 로그인하세요');
+}
+function updateAuthUI(){
+  const on = tokenValid();
+  $('authStatus').textContent = on ? '로그인됨' : (gisReady ? '로그인 안 됨' : 'Google 스크립트 불러오는 중…');
+  $('btnLogin').textContent = accessToken && !on ? '다시 로그인' : 'Google 로그인';
+  $('btnLogin').style.display = on ? 'none' : '';
+  $('btnLogout').style.display = on ? '' : 'none';
+}
+setInterval(updateAuthUI, 30000);
+$('btnLogin').onclick = async () => {
+  if(!cfg.clientId){ $('settingsBox').open = true; return toast('설정에서 OAuth 클라이언트 ID를 먼저 저장하세요'); }
+  try{ await requestToken(); toast('로그인했습니다'); await loadPlaylists(); }
+  catch(e){ toast('로그인 실패: ' + e.message, 4000); }
+};
+$('btnLogout').onclick = () => {
+  if(accessToken) try{ google.accounts.oauth2.revoke(accessToken, ()=>{}); }catch(e){}
+  accessToken = null; tokenExpiry = 0; updateAuthUI();
+};
+
+/* ---------- YouTube API ---------- */
+async function yt(path, params = {}, method = 'GET', cost = 1){
+  const url = new URL('https://www.googleapis.com/youtube/v3/' + path);
+  for(const [k, v] of Object.entries(params)) if(v !== undefined && v !== '') url.searchParams.set(k, v);
+  const r = await fetch(url, { method, headers:{ Authorization:'Bearer ' + currentToken() } });
+  addQuota(cost);
+  if(r.status === 204) return null;
+  const j = await r.json().catch(() => ({}));
+  if(!r.ok){
+    if(r.status === 401){ accessToken = null; updateAuthUI(); }
+    throw new Error(j.error?.message || ('HTTP ' + r.status));
+  }
+  return j;
+}
+
+async function loadPlaylists(){
+  playlists = [];
+  let pageToken = '';
+  do{
+    const j = await yt('playlists', { part:'snippet,contentDetails', mine:'true', maxResults:50, pageToken });
+    playlists.push(...(j.items || []));
+    pageToken = j.nextPageToken || '';
+  }while(pageToken);
+  const sel = $('plSelect');
+  if(!playlists.length){
+    sel.innerHTML = '<option>재생목록이 없습니다. 유튜브에서 "요약할 영상" 재생목록을 만들어 주세요</option>';
+    sel.disabled = true; return;
+  }
+  sel.innerHTML = '<option value="">— 요약할 재생목록 선택 —</option>' + playlists.map(p =>
+    `<option value="${esc(p.id)}">${esc(p.snippet.title)} (${p.contentDetails.itemCount})</option>`).join('');
+  sel.disabled = false; $('btnReload').disabled = false;
+  if(cfg.playlistId && playlists.some(p => p.id === cfg.playlistId)){ sel.value = cfg.playlistId; await loadItems(); }
+}
+$('plSelect').onchange = async () => { cfg.playlistId = $('plSelect').value; LS.set('yts_cfg', cfg); await loadItems(); };
+$('btnReload').onclick = async () => {
+  try{ if(!tokenValid()) await requestToken(); await loadItems(); }catch(e){ toast(e.message, 4000); }
+};
+
+async function loadItems(){
+  items = []; render();
+  const pid = cfg.playlistId;
+  if(!pid){ $('plInfo').textContent = ''; return; }
+  $('list').innerHTML = '<div class="empty"><span class="spin"></span>불러오는 중…</div>';
+  try{
+    let raw = [], pageToken = '';
+    do{
+      const j = await yt('playlistItems', { part:'snippet,contentDetails', playlistId:pid, maxResults:50, pageToken });
+      raw.push(...(j.items || []));
+      pageToken = j.nextPageToken || '';
+    }while(pageToken);
+
+    // video details (privacy + duration), 50 per call
+    const info = {};
+    const ids = [...new Set(raw.map(r => r.contentDetails.videoId))];
+    for(let i = 0; i < ids.length; i += 50){
+      const j = await yt('videos', { part:'contentDetails,status', id: ids.slice(i, i+50).join(','), maxResults:50 });
+      for(const v of j.items || []) info[v.id] = v;
+    }
+    const done = new Set(history.map(h => h.videoId));
+    items = raw.map(r => {
+      const vid = r.contentDetails.videoId, v = info[vid];
+      const privacy = v?.status?.privacyStatus || 'missing';
+      const live = v?.snippet?.liveBroadcastContent;
+      let reason = '';
+      if(!v) reason = '삭제되었거나 비공개된 영상';
+      else if(privacy !== 'public') reason = privacy === 'unlisted' ? '일부공개 영상 (Gemini 요약 불가)' : '비공개 영상 (Gemini 요약 불가)';
+      const th = r.snippet.thumbnails || {};
+      return {
+        itemId: r.id, videoId: vid,
+        title: r.snippet.title,
+        channel: r.snippet.videoOwnerChannelTitle || '',
+        thumb: (th.medium || th.high || th.default || {}).url || '',
+        duration: parseISODur(v?.contentDetails?.duration),
+        available: !reason, reason,
+        checked: false, state: 'idle', error: '', summary: '', open: false,
+        already: done.has(vid)
+      };
+    });
+    const pl = playlists.find(p => p.id === pid);
+    const n = items.length, na = items.filter(i => !i.available).length;
+    $('plInfo').textContent = `${pl ? pl.snippet.title + ' · ' : ''}영상 ${n}개` + (na ? ` · 요약 불가 ${na}개` : '');
+  }catch(e){
+    $('list').innerHTML = `<div class="empty">불러오기 실패: ${esc(e.message)}</div>`;
+    return;
+  }
+  render();
+}
+
+async function deleteItem(it){
+  await yt('playlistItems', { id: it.itemId }, 'DELETE', 50);
+  it.state = 'deleted';
+}
+
+/* ---------- Gemini ---------- */
+async function summarize(it, signal){
+  if(!cfg.geminiKey) throw new Error('설정에서 Gemini API 키를 입력하세요');
+  const body = {
+    contents: [{ role:'user', parts: [
+      { file_data: { file_uri: 'https://www.youtube.com/watch?v=' + it.videoId } },
+      { text: cfg.prompt }
+    ]}]
+  };
+  if(cfg.lowRes) body.generationConfig = { mediaResolution: 'MEDIA_RESOLUTION_LOW' };
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+  for(let attempt = 0; attempt < 3; attempt++){
+    const r = await fetch(url, { method:'POST', signal, headers:{ 'Content-Type':'application/json', 'x-goog-api-key': cfg.geminiKey }, body: JSON.stringify(body) });
+    const j = await r.json().catch(() => ({}));
+    if(r.ok){
+      const cand = j.candidates?.[0];
+      const text = (cand?.content?.parts || []).map(p => p.text || '').join('').trim();
+      if(text) return text;
+      throw new Error(j.promptFeedback?.blockReason ? '차단됨: ' + j.promptFeedback.blockReason : ('빈 응답 (' + (cand?.finishReason || '원인 불명') + ')'));
+    }
+    const msg = j.error?.message || ('HTTP ' + r.status);
+    if((r.status === 429 || r.status === 500 || r.status === 503) && attempt < 2){
+      it.error = `잠시 후 재시도 (${r.status})`; render();
+      await sleep(15000 * (attempt + 1));
+      continue;
+    }
+    throw new Error(msg);
+  }
+}
+
+/* ---------- run queue ---------- */
+async function processItem(it){
+  it.state = 'busy'; it.error = ''; render();
+  try{
+    const text = await summarize(it, abortCtl.signal);
+    it.summary = text; it.open = true;
+    const pl = playlists.find(p => p.id === cfg.playlistId);
+    history = history.filter(h => h.videoId !== it.videoId);
+    history.unshift({ videoId: it.videoId, title: it.title, channel: it.channel, duration: it.duration,
+      summary: text, model: MODEL, at: new Date().toISOString(), playlist: pl?.snippet.title || '' });
+    LS.set('yts_history', history);
+    it.state = 'done'; it.already = true;
+  }catch(e){
+    it.state = 'error';
+    it.error = e.name === 'AbortError' ? '중지됨' : e.message;
+    render(); return;
+  }
+  if(cfg.deleteAfter){
+    try{ await deleteItem(it); }
+    catch(e){ it.error = '재생목록 삭제 실패: ' + e.message; }
+  }
+  it.checked = false;
+  render();
+}
+
+$('btnRun').onclick = async () => {
+  const queue = items.filter(i => i.checked && i.available && i.state !== 'busy' && i.state !== 'deleted');
+  if(!queue.length) return toast('요약할 영상을 선택하세요');
+  if(!cfg.geminiKey){ $('settingsBox').open = true; return toast('Gemini API 키를 먼저 저장하세요'); }
+  // 삭제까지 하려면 로그인 시간이 넉넉해야 함 → 20분 미만이면 지금(클릭 중에) 갱신
+  if(cfg.deleteAfter && !tokenValid(20 * 60 * 1000)){
+    try{ await requestToken(); }catch(e){ return toast('로그인이 필요합니다: ' + e.message, 4000); }
+  }
+  running = true; abortCtl = new AbortController(); render();
+  let idx = 0;
+  const worker = async () => { while(running && idx < queue.length){ await processItem(queue[idx++]); } };
+  await Promise.all(Array.from({ length: Math.min(cfg.concurrency, queue.length) }, worker));
+  running = false; render();
+  const ok = queue.filter(i => i.state === 'done' || i.state === 'deleted').length;
+  toast(`요약 완료 ${ok}개` + (queue.length - ok ? ` · 실패 ${queue.length - ok}개` : ''), 3500);
+};
+$('btnStop').onclick = () => { running = false; abortCtl?.abort(); toast('중지했습니다. 이미 끝난 요약은 저장되어 있습니다'); };
+$('btnAll').onclick = () => { items.forEach(i => { if(i.available && i.state !== 'deleted' && i.state !== 'busy') i.checked = true; }); render(); };
+$('btnNone').onclick = () => { items.forEach(i => i.checked = false); render(); };
+
+/* ---------- render: playlist ---------- */
+function badge(it){
+  if(!it.available) return `<span class="badge b-mute">요약 불가</span>`;
+  switch(it.state){
+    case 'busy': return `<span class="badge b-busy"><span class="spin"></span>요약 중</span>`;
+    case 'done': return `<span class="badge b-ok">요약 완료</span>`;
+    case 'deleted': return `<span class="badge b-ok">요약 완료 · 재생목록에서 삭제됨</span>`;
+    case 'error': return `<span class="badge b-err">실패</span>`;
+    default: return it.already ? `<span class="badge b-warn">예전에 요약함</span>` : '';
+  }
+}
+function render(){
+  const L = $('list');
+  const hasItems = items.length > 0;
+  $('btnAll').disabled = $('btnNone').disabled = !hasItems || running;
+  $('btnRun').disabled = running || !items.some(i => i.checked);
+  $('btnRun').style.display = running ? 'none' : '';
+  $('btnStop').style.display = running ? '' : 'none';
+  const sel = items.filter(i => i.checked);
+  const secs = sel.reduce((a, i) => a + i.duration, 0);
+  $('selInfo').innerHTML = sel.length ? `${sel.length}개 선택 · 총 ${fmtHours(secs)}` + (secs > 8*3600 ? ` <span style="color:var(--warn)">(무료 등급 하루 한도 8시간 초과)</span>` : '') : '';
+  $('histCount').textContent = history.length ? `(${history.length})` : '';
+  if(!hasItems){
+    if(!L.querySelector('.spin') && !/실패/.test(L.textContent)) L.innerHTML = `<div class="empty">${cfg.playlistId && tokenValid() ? '재생목록이 비어 있습니다.' : (tokenValid() ? '요약할 재생목록을 선택하세요.' : '설정을 마치고 Google 로그인을 해주세요.')}</div>`;
+    return;
+  }
+  L.innerHTML = items.map((it, k) => {
+    const canCheck = it.available && it.state !== 'deleted' && it.state !== 'busy' && !running;
+    const hist = !it.summary && it.already ? history.find(h => h.videoId === it.videoId) : null;
+    const sum = it.summary || hist?.summary || '';
+    return `<div class="item ${it.available ? '' : 'unavail'} ${it.state === 'deleted' ? 'deleted' : ''}">
+      <input type="checkbox" data-k="${k}" ${it.checked ? 'checked' : ''} ${canCheck ? '' : 'disabled'}>
+      <a class="thumb" href="https://www.youtube.com/watch?v=${esc(it.videoId)}" target="_blank" style="background-image:url('${esc(it.thumb)}')">${it.duration ? `<span class="dur">${fmtDur(it.duration)}</span>` : ''}</a>
+      <div>
+        <a class="title" href="https://www.youtube.com/watch?v=${esc(it.videoId)}" target="_blank">${esc(it.title)}</a>
+        <div class="muted">${esc(it.channel)}</div>
+        <div style="margin-top:6px">${badge(it)}
+          ${it.reason ? `<span class="muted">${esc(it.reason)}</span>` : ''}
+          ${it.error ? `<span class="muted" style="color:var(--err)">${esc(it.error)}</span>` : ''}
+          ${sum ? `<button class="small" data-toggle="${k}">${it.open ? '요약 접기' : '요약 보기'}</button>` : ''}
+          ${it.state === 'done' && cfg.deleteAfter !== undefined ? `<button class="small" data-del="${k}">재생목록에서 삭제</button>` : ''}
+          ${!it.available ? `<button class="small" data-del="${k}">재생목록에서 삭제</button>` : ''}
+        </div>
+        ${sum && it.open ? `<div class="summary">${md(sum)}<div class="row" style="margin-top:8px"><button class="small" data-copy="${k}">복사</button></div></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+$('list').addEventListener('click', async e => {
+  const t = e.target;
+  if(t.matches('input[type=checkbox][data-k]')){ items[+t.dataset.k].checked = t.checked; render(); return; }
+  if(t.dataset.toggle !== undefined){ const it = items[+t.dataset.toggle]; it.open = !it.open; render(); return; }
+  if(t.dataset.copy !== undefined){
+    const it = items[+t.dataset.copy];
+    const s = it.summary || history.find(h => h.videoId === it.videoId)?.summary || '';
+    copyText(`${it.title}\nhttps://www.youtube.com/watch?v=${it.videoId}\n\n${s}`); return;
+  }
+  if(t.dataset.del !== undefined){
+    const it = items[+t.dataset.del];
+    try{
+      if(!tokenValid()) await requestToken();
+      t.disabled = true; await deleteItem(it); it.error = ''; render(); toast('재생목록에서 삭제했습니다');
+    }catch(err){ t.disabled = false; toast('삭제 실패: ' + err.message, 4000); }
+  }
+});
+async function copyText(s){
+  try{ await navigator.clipboard.writeText(s); toast('복사했습니다'); }
+  catch(e){ const ta = document.createElement('textarea'); ta.value = s; document.body.appendChild(ta); ta.select(); try{ document.execCommand('copy'); toast('복사했습니다'); }catch(_){ toast('복사 실패'); } ta.remove(); }
+}
+
+/* ---------- history ---------- */
+function renderHist(){
+  const q = $('histSearch').value.trim().toLowerCase();
+  const list = q ? history.filter(h => (h.title + ' ' + h.channel + ' ' + h.summary).toLowerCase().includes(q)) : history;
+  $('histCount').textContent = history.length ? `(${history.length})` : '';
+  if(!list.length){ $('histList').innerHTML = `<div class="empty">${history.length ? '검색 결과가 없습니다.' : '아직 요약한 영상이 없습니다.'}</div>`; return; }
+  $('histList').innerHTML = list.map(h => {
+    const k = history.indexOf(h);
+    return `<div class="hist">
+      <a class="title" href="https://www.youtube.com/watch?v=${esc(h.videoId)}" target="_blank">${esc(h.title)}</a>
+      <div class="meta">${esc(h.channel)}${h.duration ? ' · ' + fmtDur(h.duration) : ''} · ${new Date(h.at).toLocaleString('ko-KR')}${h.playlist ? ' · ' + esc(h.playlist) : ''}</div>
+      <div class="summary">${md(h.summary)}</div>
+      <div class="row" style="margin-top:8px">
+        <button class="small" data-hcopy="${k}">복사</button>
+        <button class="small" data-hdel="${k}">기록에서 삭제</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+$('histSearch').oninput = renderHist;
+$('histList').addEventListener('click', e => {
+  const t = e.target;
+  if(t.dataset.hcopy !== undefined){ const h = history[+t.dataset.hcopy]; copyText(`${h.title}\nhttps://www.youtube.com/watch?v=${h.videoId}\n\n${h.summary}`); }
+  if(t.dataset.hdel !== undefined){ history.splice(+t.dataset.hdel, 1); LS.set('yts_history', history); renderHist(); }
+});
+$('btnExport').onclick = () => {
+  if(!history.length) return toast('내보낼 기록이 없습니다');
+  const text = '# 유튜브 영상 요약\n\n' + history.map(h =>
+    `## ${h.title}\n${h.channel}${h.duration ? ' · ' + fmtDur(h.duration) : ''} · ${new Date(h.at).toLocaleDateString('ko-KR')}\nhttps://www.youtube.com/watch?v=${h.videoId}\n\n${h.summary}\n`).join('\n---\n\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type:'text/markdown;charset=utf-8' }));
+  a.download = `유튜브요약_${new Date().toISOString().slice(0,10)}.md`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+$('btnClearHist').onclick = () => {
+  if(!history.length) return;
+  if($('btnClearHist').dataset.armed){ history = []; LS.set('yts_history', history); renderHist(); delete $('btnClearHist').dataset.armed; $('btnClearHist').textContent = '기록 전체 삭제'; toast('기록을 모두 삭제했습니다'); return; }
+  $('btnClearHist').dataset.armed = '1'; $('btnClearHist').textContent = '한 번 더 누르면 삭제';
+  setTimeout(() => { delete $('btnClearHist').dataset.armed; $('btnClearHist').textContent = '기록 전체 삭제'; }, 3000);
+};
+
+/* ---------- tabs ---------- */
+$('tabList').onclick = () => { $('tabList').classList.add('on'); $('tabHist').classList.remove('on'); $('viewList').style.display = ''; $('viewHist').style.display = 'none'; render(); };
+$('tabHist').onclick = () => { $('tabHist').classList.add('on'); $('tabList').classList.remove('on'); $('viewHist').style.display = ''; $('viewList').style.display = 'none'; renderHist(); };
+
+/* ---------- init ---------- */
+loadSettingsUI();
+updateAuthUI();
+render();
+</script>
+</body>
+</html>
